@@ -4,4 +4,4 @@ app = FastAPI()
 
 @app.get("/")
 def root():
-    return {"message":"Hello DockerA!"}
+    return {"message":"Hello Docker!"}
