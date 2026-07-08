@@ -246,3 +246,206 @@ jobs:
 3. **deploy**（EKSデプロイ）
 
 の3ジョブに分け、`needs` を使って依存関係を設定する構成がおすすめです。失敗箇所が分かりやすくなり、将来的にステージング・本番へのデプロイや承認フローも追加しやすくなります。
+
+# 質問その2
+質問：これって、pytestなどで失敗したときに、pull request,mergeってキャンセルされますか？
+
+解答：結論から言うと、**今のworkflowではキャンセルされません。**
+
+理由は、このWorkflowのトリガーが
+
+```yaml
+on:
+  pull_request:
+    branches:
+      - develop
+    types:
+      - closed
+```
+
+だからです。
+
+`types: closed` は**「Pull Requestが閉じられた後」**に実行されます。そして
+
+```yaml
+if: github.event.pull_request.merged == true
+```
+
+によって、「マージが完了した後」にのみWorkflowが開始されます。
+
+つまり時系列は
+
+```text
+feature
+    │
+    ▼
+Pull Request作成
+    │
+    ▼
+レビュー
+    │
+    ▼
+Merge ← ここでdevelopへ反映される
+    │
+    ▼
+GitHub Actions開始
+    │
+    ├── pytest失敗
+    └── npm test失敗
+```
+
+となるため、**テストが失敗してもdevelopには既にマージ済み**です。
+
+---
+
+## 一般的な運用
+
+通常は次のように**2つのWorkflow**に分けます。
+
+```text
+① Pull Request作成・更新
+        │
+        ▼
+pytest
+Next.js Test
+        │
+        ├── PASS
+        │      ↓
+        │   Merge可能
+        │
+        └── FAIL
+               ↓
+        Merge不可
+```
+
+↓
+
+```text
+② developへMerge
+        │
+        ▼
+Docker Build
+        │
+        ▼
+ECR Push
+        │
+        ▼
+EKS Deploy
+```
+
+これがGitHubでも最もよく採用されるCI/CDの構成です。
+
+---
+
+## Workflow①（CI）
+
+トリガーは
+
+```yaml
+on:
+  pull_request:
+    branches:
+      - develop
+```
+
+ここでは
+
+* pytest
+* Next.js test
+
+だけ実行します。
+
+失敗すると
+
+```text
+❌ Checks failed
+```
+
+になります。
+
+さらにGitHubの**Branch Protection Rule**で
+
+> **Require status checks to pass before merging**
+
+を有効にすると、
+
+```text
+pytest ❌
+```
+
+の状態では**Mergeボタンが押せなくなります**。
+
+---
+
+## Workflow②（CD）
+
+こちらは
+
+```yaml
+on:
+  pull_request:
+    branches:
+      - develop
+    types:
+      - closed
+```
+
+または
+
+```yaml
+on:
+  push:
+    branches:
+      - develop
+```
+
+をトリガーにして、
+
+* Docker Build
+* ECR Push
+* EKS Deploy
+
+だけを担当させます。
+
+---
+
+## 私のおすすめ構成
+
+あなたのプロジェクト（Python + Next.js + ECR + EKS）なら、次のように分けるのがおすすめです。
+
+```text
+feature
+    │
+    ▼
+Pull Request
+    │
+    ▼
+GitHub Actions (CI)
+    ├── pytest
+    └── npm test
+    │
+    ├── PASS
+    │      ↓
+    │   Merge可能
+    │
+    └── FAIL
+           ↓
+      Merge不可
+              │
+              ▼
+developへMerge
+              │
+              ▼
+GitHub Actions (CD)
+    ├── Docker Build
+    ├── ECR Push
+    └── EKS Deploy
+```
+
+この構成には次の利点があります。
+
+* **品質保証**：テストに通らないコードは`develop`に入らない。
+* **責務の分離**：CI（テスト）とCD（デプロイ）が独立し、トラブル時の切り分けが容易。
+* **運用性**：将来的にステージング環境や本番環境へのデプロイフローを追加しやすい。
+
+この構成が、実際の業務でも広く採用されているベストプラクティスです。
