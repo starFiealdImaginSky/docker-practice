@@ -1,5 +1,6 @@
 # GitHub Actions VS. ChatGPT
 ## #信用するなChatGPT #それはそれとして助かる
+# このmdファイルは不要になったら削除します。
 
 命令：GitHubActions を使って、自動化をしたい。 developブランチに他ブランチからマージを行ったときをトリガーにして、 python はpytest実行、Next.jsはNext.jsに対応するテスト実行、pass後、 event-appコンテナとevent-app-webコンテナをECRにプッシュしたい。プッシュするレジストリは 両方event-appレジストリ。タグは、event-appの方はevent-up:backend-<gitのcommitログの番号>、event-app-webの方はevent-up:frontend-<gitのcommitログの番号>です。更にその後、EKSにデプロイしたいです。その流れ実現するworkflow.yamlを作成してください。
 
